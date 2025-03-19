@@ -11,13 +11,20 @@
       <div></div>
       <div class="header-right">
         <div class="language-switch">
-          <el-button 
-            @click="switchLanguage" 
-            size="small" 
-            class="lang-btn"
-          >
-            {{ currentLang === 'zh-CN' ? 'English' : '中文' }}
-          </el-button>
+          <el-dropdown @command="changeLanguage">
+            <el-button size="small" class="lang-btn">
+              {{ getLanguageLabel(currentLang) }}
+              <el-icon class="el-icon--right"><arrow-down /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="en-US">English</el-dropdown-item>
+                <el-dropdown-item command="zh-CN">中文</el-dropdown-item>
+                <el-dropdown-item command="ja-JP">日本語</el-dropdown-item>
+                <el-dropdown-item command="ko-KR">한국어</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </div>
         <a href="https://github.com/ishangsf/download-vsix" target="_blank" class="github-link" title="GitHub仓库">
           <svg height="32" aria-hidden="true" viewBox="0 0 16 16" version="1.1" width="32" data-view-component="true" class="github-icon">
@@ -219,7 +226,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import axios from 'axios'
-import { Search, Download, Back } from '@element-plus/icons-vue'
+import { Search, Download, Back, ArrowDown } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import i18n, { currentLang } from './i18n'
 import { ElMessage } from 'element-plus'
@@ -239,6 +246,24 @@ watch(extension, (newVal) => {
   }
 }, { immediate: true })
 
+// 获取当前语言标签
+function getLanguageLabel(lang) {
+  const labels = {
+    'en-US': 'English',
+    'zh-CN': '中文',
+    'ja-JP': '日本語',
+    'ko-KR': '한국어'
+  }
+  return labels[lang] || 'English'
+}
+
+// 切换语言
+function changeLanguage(lang) {
+  currentLang.value = lang;
+  // 更新HTML的lang属性
+  document.documentElement.lang = lang;
+}
+
 // 格式化日期
 function formatDate(dateString) {
   if (!dateString) return '';
@@ -256,15 +281,6 @@ function getTagType(index) {
 function getCategoryType(index) {
   const types = ['', 'success', 'warning', 'danger', 'info'];
   return types[index % types.length];
-}
-
-// 切换语言
-function switchLanguage() {
-  currentLang.value = currentLang.value === 'zh-CN' ? 'en-US' : 'zh-CN';
-  // 更新HTML的lang属性
-  document.documentElement.lang = currentLang.value;
-  // i18n实例的locale属性会通过i18n.js中的watch自动更新
-  // 这里不需要手动设置i18n.global.locale.value，因为已经在i18n.js中通过watch实现了
 }
 
 // 搜索扩展
