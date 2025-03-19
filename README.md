@@ -30,7 +30,7 @@ Download Vsix is a web application built with Vue 3 and Element Plus, designed t
 #### Installation
 1. Clone the repository
 ```bash
-git clone [repository-url]
+git clone git@github.com:ishangsf/download-vsix.git
 cd download-vsix
 ```
 
@@ -97,7 +97,7 @@ Download Vsix 是一个使用 Vue 3 和 Element Plus 构建的 Web 应用程序�
 #### 安装步骤
 1. 克隆仓库
 ```bash
-git clone [仓库地址]
+git clone git@github.com:ishangsf/download-vsix.git
 cd download-vsix
 ```
 
@@ -164,7 +164,7 @@ Download Vsix は、Vue 3 と Element Plus で構築された Web アプリケ�
 #### インストール手順
 1. リポジトリのクローン
 ```bash
-git clone [リポジトリURL]
+git clone git@github.com:ishangsf/download-vsix.git
 cd download-vsix
 ```
 
@@ -231,7 +231,7 @@ Download Vsix는 Vue 3와 Element Plus로 구축된 웹 애플리케이션으로
 #### 설치 방법
 1. 저장소 복제
 ```bash
-git clone [저장소URL]
+git clone git@github.com:ishangsf/download-vsix.git
 cd download-vsix
 ```
 
