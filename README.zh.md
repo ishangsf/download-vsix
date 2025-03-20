@@ -8,6 +8,8 @@
 ## 简介
 Download Vsix 是一个使用 Vue 3 和 Element Plus 构建的 Web 应用程序，旨在帮助用户下载 VS Code 扩展的 .vsix 格式文件。该工具提供了友好的用户界面，用于搜索和下载 VS Code 扩展。
 
+![Screenshot](screenshot.png)
+
 ## 功能特点
 - 搜索 VS Code 扩展
 - 下载 .vsix 格式的扩展
@@ -31,7 +33,7 @@ Download Vsix 是一个使用 Vue 3 和 Element Plus 构建的 Web 应用程序�
 ### 安装步骤
 1. 克隆仓库
 ```bash
-git clone [仓库地址]
+git clone https://github.com/ishangsf/download-vsix.git
 cd download-vsix
 ```
 
