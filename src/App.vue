@@ -190,19 +190,6 @@
                 {{ selectedVersionInfo.isPrerelease ? $t('prerelease') : $t('stable') }}
               </el-tag>
             </div>
-            <div v-if="downloading" class="download-progress">
-              <el-progress 
-                :percentage="downloadProgress" 
-                :status="downloadStatus"
-                :stroke-width="4"
-                :show-text="true"
-                :format="progressFormat"
-              />
-              <div class="download-info">
-                <span>{{ formatFileSize(downloadedSize) }} / {{ formatFileSize(totalSize) }}</span>
-                <span>{{ downloadSpeed }} MB/s</span>
-              </div>
-            </div>
           </div>
         </el-card>
       </div>
@@ -256,25 +243,11 @@ const loading = ref(false)
 const error = ref('')
 const downloading = ref(false)
 const selectedVersion = ref('')
-const downloadProgress = ref(0)
-const downloadedSize = ref(0)
-const totalSize = ref(0)
-const downloadSpeed = ref('0')
-const downloadStatus = ref('')
-let startTime = 0
-let lastLoaded = 0
-let speedTimer = null
 
 // 监听扩展变化，自动选择最新版本
 watch(extension, (newVal) => {
   if (newVal && newVal.versions && newVal.versions.length > 0) {
-    // 确保使用已经过滤和排序后的版本列表中的第一个版本
     const firstVersion = newVal.versions[0].version;
-    
-    // 记录到控制台，方便调试版本信息
-    console.log(`选择扩展版本: ${firstVersion}`);
-    console.log(`可用版本列表:`, newVal.versions.map(v => `${v.version} (${v.lastUpdated})`));
-    
     selectedVersion.value = firstVersion;
   }
 }, { immediate: true })
@@ -335,7 +308,6 @@ const uniqueVersions = computed(() => {
 // 计算选定版本的信息
 const selectedVersionInfo = computed(() => {
   if (!extension.value || !extension.value.versions || !selectedVersion.value) return null;
-  
   return extension.value.versions.find(v => v.version === selectedVersion.value) || null;
 });
 
@@ -376,100 +348,13 @@ function getCategoryType(index) {
   return types[index % types.length];
 }
 
-// 格式化文件大小
-function formatFileSize(bytes) {
-  if (!bytes || isNaN(bytes)) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(Math.max(1, bytes)) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-// 格式化进度条文本
-function progressFormat(percentage) {
-  return percentage === 100 ? '下载完成' : `${percentage}%`
-}
-
-// 计算下载速度
-function updateDownloadSpeed(loaded) {
-  const now = Date.now()
-  const timeDiff = Math.max(0.1, (now - startTime) / 1000) // 至少0.1秒，避免除以0
-  const loadedDiff = Math.max(0, loaded - lastLoaded)
-  const speed = (loadedDiff / timeDiff) / (1024 * 1024) // 转换为MB/s
-  downloadSpeed.value = speed.toFixed(2)
-  lastLoaded = loaded
-  startTime = now
-}
-
-// 从VSCode商店网页获取版本信息
-async function getVSCodeMarketplaceVersion(publisher, extensionName) {
-  try {
-    // 请求VSCode商店网页
-    const storeUrl = `https://marketplace.visualstudio.com/items?itemName=${publisher}.${extensionName}`;
-    console.log('获取商店版本信息:', storeUrl);
-    
-    const response = await axios.get(storeUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      }
-    });
-    
-    // 解析HTML获取版本信息
-    const html = response.data;
-    
-    // 尝试多种可能的版本标记
-    const versionPatterns = [
-      /<span class="version-label">([^<]+)<\/span>/,
-      /<span class="ux-item-version">([^<]+)<\/span>/,
-      /<meta name="version" content="([^"]+)"\s*\/>/,
-      /Version<\/span>\s*<span[^>]*>([\d\.]+)/,
-      /"Version"\s*:\s*"([^"]+)"/
-    ];
-    
-    let storeVersion = null;
-    
-    // 尝试所有模式
-    for (const pattern of versionPatterns) {
-      const match = html.match(pattern);
-      if (match && match[1]) {
-        storeVersion = match[1].trim();
-        console.log(`通过模式 ${pattern} 找到商店版本:`, storeVersion);
-        break;
-      }
-    }
-    
-    if (storeVersion) {
-      return storeVersion;
-    } else {
-      // 寻找版本号相关内容
-      const versionContext = html.match(/version[^<>]*>([\d\.]+)/i);
-      if (versionContext && versionContext[1]) {
-        console.log('通过上下文找到商店版本:', versionContext[1]);
-        return versionContext[1].trim();
-      }
-      
-      console.log('未找到商店版本信息');
-      return null;
-    }
-  } catch (error) {
-    console.error('获取商店版本出错:', error);
-    return null;
-  }
-}
-
 // 过滤和排序版本
 function filterAndSortVersions() {
   if (!extension.value || !extension.value.versions || extension.value.versions.length === 0) {
     return;
   }
   
-  // 保存原始版本列表（深拷贝，避免引用问题）
-  extension.value.originalVersions = JSON.parse(JSON.stringify(extension.value.versions));
-  
-  console.log('原始版本列表:', extension.value.versions.map(v => v.version));
-  
   // 增强的预发布标记识别
-  // 1. 包含常见预发布标识
   const prereleaseRegex = /-(alpha|beta|preview|rc|dev|nightly|insiders|next|canary|test|exp|unstable|pre|snapshot|build|ci|daily|edge|internal)/i;
   
   // 标记是否为预发布版本
@@ -477,79 +362,49 @@ function filterAndSortVersions() {
     // 检查是否包含预发布标识
     v.isPrerelease = prereleaseRegex.test(v.version);
     
-    // 如果版本号包含 4 位及以上数字(如1.1.1.20220101)，可能是预发布版本
-    const numSegments = v.version.split('.').length;
-    if (numSegments > 3) {
-      v.isPrerelease = true;
-    }
-    
-    // 检查版本号是否包含任何非标准字符（字母等）
-    if (!v.isPrerelease && /[a-zA-Z]/.test(v.version)) {
-      v.isPrerelease = true;
-    }
-    
-    // 通常版本号超过 1.1.99 的可能是预发布版本
-    const parts = v.version.split('.');
-    if (parts.length >= 3) {
-      const patchVersion = parseInt(parts[2], 10);
-      if (patchVersion > 99) {
+    // 检查版本结构
+    if (!v.isPrerelease) {
+      // 如果版本号包含 4 位及以上数字，可能是预发布版本
+      const numSegments = v.version.split('.').length;
+      if (numSegments > 3) {
+        v.isPrerelease = true;
+      }
+      
+      // 检查版本号是否包含任何字母
+      if (/[a-zA-Z]/.test(v.version)) {
+        v.isPrerelease = true;
+      }
+      
+      // 检查补丁版本是否异常大
+      const parts = v.version.split('.');
+      if (parts.length >= 3) {
+        const patchVersion = parseInt(parts[2], 10);
+        if (patchVersion > 99) {
+          v.isPrerelease = true;
+        }
+      }
+      
+      // 检查是否包含日期格式
+      if (/\d{8}/.test(v.version)) {
         v.isPrerelease = true;
       }
     }
-    
-    // 如果版本中包含日期格式（如 20230101）也视为预发布
-    if (/\d{8}/.test(v.version)) {
-      v.isPrerelease = true;
-    }
-    
-    // Continue插件特殊处理：已知版本1.0.5是稳定版本
-    if (extension.value.extensionName === 'continue' && 
-        extension.value.publisher && 
-        extension.value.publisher.publisherName === 'Continue') {
-      // 针对Continue插件的版本判断
-      // 已知1.0.x系列是稳定版本
-      if (/^1\.0\.\d+$/.test(v.version)) {
-        v.isPrerelease = false;
-      } 
-      // 1.1.x系列可能是预发布版本
-      else if (/^1\.1\.\d+$/.test(v.version)) {
-        v.isPrerelease = true;
-      }
-    }
-    
-    // 打印每个版本的判断结果
-    console.log(`版本 ${v.version}: ${v.isPrerelease ? '预发布' : '稳定版'}`);
   });
   
-  // 首先尝试找出所有稳定版本
+  // 过滤稳定版本
   const stableVersions = extension.value.versions.filter(v => !v.isPrerelease);
-  
-  // 添加统计日志
-  const totalVersions = extension.value.versions.length;
-  const stableCount = stableVersions.length;
-  const prereleaseCount = totalVersions - stableCount;
-  console.log(`版本统计：共${totalVersions}个版本，${stableCount}个稳定版本，${prereleaseCount}个预发布版本`);
 
-  // 如果存在稳定版本，则使用稳定版本列表，否则保留原始版本列表
+  // 如果存在稳定版本，则使用稳定版本列表
   if (stableVersions.length > 0) {
-    console.log('使用稳定版本:', stableVersions.map(v => v.version));
     extension.value.versions = stableVersions;
-  } else {
-    console.log('找不到稳定版本，使用所有版本');
   }
   
-  // 输出筛选后的版本列表
-  console.log('筛选后的版本列表:', extension.value.versions.map(v => v.version));
-  
-  // 按版本号排序（使用简单的语义化版本比较）
+  // 按版本号排序
   extension.value.versions.sort((a, b) => {
     // 解析版本号
     const parseVersion = (version) => {
-      // 去除预发布标识符，只保留数字部分
       const mainVersion = version.split('-')[0];
-      // 将版本号拆分为各个部分
       const parts = mainVersion.split('.');
-      // 转换为数字数组，最多取前三段
       return parts.slice(0, 3).map(part => parseInt(part, 10) || 0);
     };
     
@@ -559,27 +414,13 @@ function filterAndSortVersions() {
     // 依次比较主版本号、次版本号、修订号
     for (let i = 0; i < 3; i++) {
       if (vA[i] !== vB[i]) {
-        // 数字大的版本排在前面
         return vB[i] - vA[i];
       }
     }
     
-    // 如果语义化版本号相同，则稳定版本优先于预发布版本
-    if (a.isPrerelease !== b.isPrerelease) {
-      return a.isPrerelease ? 1 : -1;
-    }
-    
-    // 如果都是预发布版本或都是稳定版本，按日期排序
+    // 按日期排序
     return new Date(b.lastUpdated) - new Date(a.lastUpdated);
   });
-  
-  console.log('排序后版本列表:', extension.value.versions.map(v => v.version));
-  
-  // 安全检查：确保至少有一个版本
-  if (extension.value.versions.length === 0) {
-    console.warn('警告：过滤后没有版本可用，恢复使用原始版本');
-    extension.value.versions = extension.value.originalVersions || [];
-  }
 }
 
 // 搜索扩展
@@ -594,8 +435,9 @@ async function searchExtension() {
   extension.value = null
 
   try {
-    // 构建API URL
     const query = searchQuery.value.trim()
+    
+    // 构建API URL
     const apiUrl = `https://marketplace.visualstudio.com/_apis/public/gallery/extensionquery`
     
     // 使用多种搜索条件
@@ -603,155 +445,15 @@ async function searchExtension() {
       filters: [
         {
           criteria: [
-            { filterType: 7, value: query }, // 按展示名或ID过滤
-            { filterType: 8, value: query }, // 按ID过滤
-            { filterType: 4, value: query }, // 按扩展名过滤
-            { filterType: 10, value: query }, // 按标签过滤
-            { filterType: 12, value: query }  // 按显示名称过滤
+            { filterType: 10, value: query } // 按标签过滤
           ],
           pageSize: 100,
           pageNumber: 1
         }
       ],
-      flags: 135, // 更新flags值
+      flags: 135,
       assetTypes: [],
-      includeAllVersions: true // 包含所有版本，便于过滤
-    }
-
-    // 某些特定的插件名称需要特殊处理
-    if (query.toLowerCase() === 'continue' || query.toLowerCase().includes('continue.continue')) {
-      console.log('检测到搜索Continue插件，使用特定查询参数');
-      
-      // 尝试多种不同的搜索方法
-      const searchMethods = [
-        // 方法1: 使用精确ID
-        async () => {
-          requestBody.filters[0].criteria = [
-            { filterType: 7, value: 'continue.continue' } // 使用精确ID
-          ];
-          
-          const response = await axios.post(apiUrl, requestBody, {
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json;api-version=3.0-preview.1'
-            },
-            timeout: 10000
-          });
-          
-          return response;
-        },
-        
-        // 方法2: 直接API请求
-        async () => {
-          const directUrl = 'https://marketplace.visualstudio.com/_apis/public/gallery/publishers/Continue/vsextensions/continue';
-          console.log('尝试直接请求Continue API:', directUrl);
-          
-          const response = await axios.get(directUrl, {
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json;api-version=3.0-preview.1'
-            }
-          });
-          
-          return { 
-            data: { 
-              results: [{ 
-                extensions: [
-                  {
-                    publisher: {
-                      publisherName: 'Continue',
-                      displayName: 'Continue'
-                    },
-                    extensionName: 'continue',
-                    displayName: 'Continue',
-                    shortDescription: response.data.shortDescription || 'AI tool that autocompletes your code',
-                    versions: response.data.versions || [],
-                    icon: response.data.icon || null,
-                    tags: response.data.tags || [],
-                    categories: response.data.categories || []
-                  }
-                ]
-              }]
-            }
-          };
-        },
-        
-        // 方法3: 硬编码已知版本信息(最后的备选方案)
-        async () => {
-          return {
-            data: {
-              results: [{
-                extensions: [{
-                  publisher: {
-                    publisherName: 'Continue',
-                    displayName: 'Continue'
-                  },
-                  extensionName: 'continue',
-                  displayName: 'Continue',
-                  shortDescription: 'AI tool that helps you code faster.',
-                  icon: 'https://continue.dev/continue-logo.png',
-                  versions: [
-                    // 只包含确认的稳定版本
-                    { version: '1.0.5', lastUpdated: '2023-12-15T00:00:00.000Z', isPrerelease: false },
-                    { version: '1.0.4', lastUpdated: '2023-12-01T00:00:00.000Z', isPrerelease: false },
-                    { version: '1.0.3', lastUpdated: '2023-11-15T00:00:00.000Z', isPrerelease: false }
-                  ],
-                  tags: ['AI', 'IntelliSense', 'Productivity'],
-                  categories: ['Other']
-                }]
-              }]
-            }
-          };
-        }
-      ];
-      
-      // 依次尝试每种方法
-      let succeeded = false;
-      for (const method of searchMethods) {
-        if (succeeded) break;
-        
-        try {
-          console.log('尝试下一种搜索方法');
-          const response = await method();
-          
-          // 处理响应
-          if (response.data && response.data.results && 
-              response.data.results.length > 0 && 
-              response.data.results[0].extensions && 
-              response.data.results[0].extensions.length > 0) {
-            
-            extension.value = response.data.results[0].extensions[0];
-            filterAndSortVersions();
-            
-            // 处理成功
-            loading.value = false;
-            ElMessage({
-              message: t('searchSuccess', { name: extension.value.displayName }),
-              type: 'success'
-            });
-            
-            succeeded = true;
-            return;
-          }
-        } catch (err) {
-          console.error('搜索方法失败:', err);
-          // 继续尝试下一种方法
-        }
-      }
-      
-      // 如果所有方法都失败，继续常规搜索
-      if (!succeeded) {
-        console.log('所有特殊处理方法都失败，回退到常规搜索');
-        requestBody.filters[0].criteria = [
-          { filterType: 7, value: query }, // 按展示名或ID过滤
-          { filterType: 8, value: query }, // 按ID过滤
-          { filterType: 4, value: query }, // 按扩展名过滤
-          { filterType: 10, value: query }, // 按标签过滤
-          { filterType: 12, value: query }  // 按显示名称过滤
-        ];
-      }
-    } else {
-      console.log('使用常规搜索参数');
+      includeAllVersions: true
     }
 
     // 发送请求
@@ -760,181 +462,88 @@ async function searchExtension() {
         'Content-Type': 'application/json',
         'Accept': 'application/json;api-version=3.0-preview.1'
       },
-      timeout: 10000 // 设置10秒超时
+      timeout: 10000
     })
 
-    // 检查响应数据结构
-    if (response.data && response.data.results) {
-      if (response.data.results.length > 0) {
-        if (response.data.results[0].extensions && 
-            response.data.results[0].extensions.length > 0) {
-          
-          const rawExtension = response.data.results[0].extensions[0];
-          extension.value = rawExtension;
-          
-          // 过滤版本，排除预发布版本
-          filterAndSortVersions();
-          
-          // 获取商店版本信息进行比较
-          if (extension.value.publisher && extension.value.extensionName) {
-            const storeVersion = await getVSCodeMarketplaceVersion(
-              extension.value.publisher.publisherName,
-              extension.value.extensionName
-            );
-            
-            if (storeVersion) {
-              console.log('API版本:', extension.value.versions[0].version);
-              console.log('商店版本:', storeVersion);
-              
-              // 检查是否存在匹配的版本
-              const matchingVersion = extension.value.versions.find(v => v.version === storeVersion);
-              if (matchingVersion) {
-                console.log('在API结果中找到匹配的商店版本');
-                // 将匹配版本移到第一位
-                extension.value.versions = [
-                  matchingVersion,
-                  ...extension.value.versions.filter(v => v.version !== storeVersion)
-                ];
-              } else {
-                console.log('API结果中未找到匹配的商店版本');
-              }
-            }
-          }
-          
-          ElMessage({
-            message: t('searchSuccess', { name: extension.value.displayName }),
-            type: 'success'
-          })
-        } else {
-          error.value = t('errorNotFound')
-          ElMessage({
-            message: t('errorNotFound'),
-            type: 'warning'
-          })
-        }
-      } else {
-        error.value = t('errorNotFound')
-        ElMessage({
-          message: t('errorNotFound'),
-          type: 'warning'
-        })
-      }
+    // 处理响应
+    if (response.data && 
+        response.data.results && 
+        response.data.results.length > 0 && 
+        response.data.results[0].extensions && 
+        response.data.results[0].extensions.length > 0) {
+      
+      extension.value = response.data.results[0].extensions[0];
+      filterAndSortVersions();
+      
+      ElMessage({
+        message: t('searchSuccess', { name: extension.value.displayName }),
+        type: 'success'
+      });
     } else {
-      error.value = t('errorNotFound')
+      error.value = t('errorNotFound');
       ElMessage({
         message: t('errorNotFound'),
         type: 'warning'
-      })
+      });
     }
   } catch (err) {
-    // 提供更详细的错误信息
     console.error('API请求错误:', err);
     if (err.response) {
-      // 服务器返回了错误状态码
-      console.error('响应数据:', err.response.data);
-      console.error('响应状态:', err.response.status);
-      console.error('响应头:', err.response.headers);
-      error.value = `${t('errorGeneric')} ${err.response.status} - ${err.message}`
-      ElMessage({
-        message: `${t('errorGeneric')} ${err.response.status} - ${err.message}`,
-        type: 'error'
-      })
+      error.value = `${t('errorGeneric')} ${err.response.status} - ${err.message}`;
     } else if (err.request) {
-      // 请求已发送但没有收到响应
-      console.error('请求内容:', err.request);
-      error.value = t('errorNetwork')
-      ElMessage({
-        message: t('errorNetwork'),
-        type: 'error'
-      })
+      error.value = t('errorNetwork');
     } else {
-      // 请求设置时出错
-      console.error('错误信息:', err.message);
-      error.value = t('errorGeneric') + (err.message || t('unknown'))
-      ElMessage({
-        message: t('errorGeneric') + (err.message || t('unknown')),
-        type: 'error'
-      })
+      error.value = t('errorGeneric') + (err.message || t('unknown'));
     }
+    
+    ElMessage({
+      message: error.value,
+      type: 'error'
+    });
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 // 下载扩展
-async function downloadExtension() {
-  if (!extension.value || !selectedVersion.value) return
-  
-  downloading.value = true
-  downloadProgress.value = 0
-  downloadedSize.value = 0
-  totalSize.value = 0
-  downloadSpeed.value = '0'
-  downloadStatus.value = ''
-  startTime = Date.now()
-  lastLoaded = 0
+function downloadExtension() {
+  if (!extension.value || !selectedVersion.value) return;
   
   try {
-    const publisher = extension.value.publisher.publisherName
-    const extensionName = extension.value.extensionName
-    const version = selectedVersion.value
+    const publisher = extension.value.publisher.publisherName;
+    const extensionName = extension.value.extensionName;
+    const version = selectedVersion.value;
     
-    const downloadUrl = `https://marketplace.visualstudio.com/_apis/public/gallery/publishers/${publisher}/vsextensions/${extensionName}/${version}/vspackage`
+    // 构建下载URL
+    const downloadUrl = `https://marketplace.visualstudio.com/_apis/public/gallery/publishers/${publisher}/vsextensions/${extensionName}/${version}/vspackage`;
     
-    const response = await axios.get(downloadUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/octet-stream',
-        'X-Market-Client-Id': 'VSCode',
-        'X-Market-User-Id': 'VSCode'
-      },
-      responseType: 'blob',
-      onDownloadProgress: (progressEvent) => {
-        if (progressEvent.lengthComputable) {
-          const loaded = progressEvent.loaded || 0
-          const total = progressEvent.total || 0
-          
-          downloadedSize.value = loaded
-          totalSize.value = total
-          
-          // 确保total不为0，避免NaN
-          if (total > 0) {
-            downloadProgress.value = Math.round((loaded * 100) / total)
-          }
-          
-          updateDownloadSpeed(loaded)
-        }
-      }
-    })
+    // 使用浏览器直接打开URL进行下载
+    window.open(downloadUrl, '_blank');
     
-    // 创建Blob URL并触发下载
-    const blob = new Blob([response.data])
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `${publisher}.${extensionName}-${version}.vsix`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(link.href)
+    // 设置为完成状态
+    downloading.value = false;
     
-    downloadStatus.value = 'success'
-    // 显示下载成功消息
     ElMessage({
       message: t('downloadSuccess', { name: extension.value.displayName }),
-      type: 'success'
-    })
+      type: 'success',
+      duration: 5000,
+      showClose: true,
+      dangerouslyUseHTMLString: true,
+      message: `${t('downloadSuccess', { name: extension.value.displayName })}<br>${t('installTips')}`
+    });
   } catch (err) {
-    downloadStatus.value = 'exception'
-    error.value = t('errorDownload') + (err.message || t('unknown'))
+    downloading.value = false;
+    console.error('下载错误:', err);
+    
+    const errorMessage = t('errorDownload') + (err.message || '');
+    error.value = errorMessage;
+    
     ElMessage({
-      message: t('errorDownload') + (err.message || t('unknown')),
-      type: 'error'
-    })
-  } finally {
-    downloading.value = false
-    if (speedTimer) {
-      clearInterval(speedTimer)
-    }
+      message: errorMessage,
+      type: 'error',
+      duration: 0,
+      showClose: true
+    });
   }
 }
 
@@ -1370,34 +979,5 @@ function resetSearch() {
   bottom: 50px;
   left: 50%;
   transform: translateX(-50%);
-}
-
-.download-progress {
-  margin-top: 1rem;
-  width: 100%;
-}
-
-.download-info {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 0.5rem;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 0.9rem;
-}
-
-:deep(.el-progress-bar__outer) {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-:deep(.el-progress-bar__inner) {
-  background-color: #646cff;
-}
-
-:deep(.el-progress-bar__inner.is-success) {
-  background-color: #67c23a;
-}
-
-:deep(.el-progress-bar__inner.is-exception) {
-  background-color: #f56c6c;
 }
 </style>

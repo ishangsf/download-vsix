@@ -8,7 +8,6 @@ export const currentLang = ref(localStorage.getItem('language') || 'en-US')
 // 监听语言变化并保存到localStorage并更新i18n实例的locale
 watch(currentLang, (newLang) => {
   localStorage.setItem('language', newLang)
-  // 这里不需要手动更新i18n实例，因为我们会在创建时绑定响应式引用
 })
 
 // 定义翻译消息
@@ -29,6 +28,8 @@ const messages = {
     errorNetwork: 'Search error: No server response, please check your network connection',
     errorGeneric: 'Search error: ',
     errorDownload: 'Download error: ',
+    errorDownloadEmpty: 'Downloaded file is empty',
+    errorDownloadTooSmall: 'Downloaded file is too small, possibly an error message',
     publisher: 'Publisher',
     unknown: 'Unknown',
     backButton: 'Back to Search',
@@ -49,7 +50,8 @@ const messages = {
     stable: 'Stable Version',
     prerelease: 'Pre-release Version',
     searchSuccess: 'Found extension: {name}',
-    downloadSuccess: 'Successfully downloaded: {name}'
+    downloadSuccess: 'Successfully downloaded: {name}',
+    installTips: 'Install with command: <code>code --install-extension [filename.vsix]</code>'
   },
   'zh-CN': {
     appTitle: 'VSCode插件离线下载工具',
@@ -67,6 +69,8 @@ const messages = {
     errorNetwork: '搜索插件时出错: 未收到服务器响应，请检查网络连接',
     errorGeneric: '搜索插件时出错: ',
     errorDownload: '下载插件时出错: ',
+    errorDownloadEmpty: '下载的文件为空',
+    errorDownloadTooSmall: '下载的文件太小，可能是错误消息',
     publisher: '发布者',
     unknown: '未知',
     backButton: '返回搜索',
@@ -87,7 +91,8 @@ const messages = {
     stable: '稳定版本',
     prerelease: '预发布版本',
     searchSuccess: '已找到插件: {name}',
-    downloadSuccess: '成功下载插件: {name}'
+    downloadSuccess: '成功下载插件: {name}',
+    installTips: '安装命令: <code>code --install-extension [文件名.vsix]</code>'
   },
   'ja-JP': {
     appTitle: 'VSCode拡張機能オフラインダウンロードツール',
@@ -105,6 +110,8 @@ const messages = {
     errorNetwork: '検索エラー：サーバーからの応答がありません。ネットワーク接続を確認してください',
     errorGeneric: '検索エラー: ',
     errorDownload: 'ダウンロードエラー: ',
+    errorDownloadEmpty: 'ダウンロードしたファイルが空です',
+    errorDownloadTooSmall: 'ダウンロードしたファイルが小さすぎます。エラーメッセージの可能性があります',
     publisher: '発行者',
     unknown: '不明',
     backButton: '検索に戻る',
@@ -125,7 +132,8 @@ const messages = {
     stable: '安定版',
     prerelease: 'プレリリース版',
     searchSuccess: '拡張機能が見つかりました: {name}',
-    downloadSuccess: 'ダウンロードが完了しました: {name}'
+    downloadSuccess: 'ダウンロードが完了しました: {name}',
+    installTips: 'インストールコマンド: <code>code --install-extension [ファイル名.vsix]</code>'
   },
   'ko-KR': {
     appTitle: 'VSCode 확장 프로그램 오프라인 다운로드 도구',
@@ -143,6 +151,8 @@ const messages = {
     errorNetwork: '검색 오류: 서버 응답이 없습니다. 네트워크 연결을 확인하세요',
     errorGeneric: '검색 오류: ',
     errorDownload: '다운로드 오류: ',
+    errorDownloadEmpty: '다운로드된 파일이 비어 있습니다',
+    errorDownloadTooSmall: '다운로드된 파일이 너무 작습니다. 오류 메시지일 수 있습니다',
     publisher: '게시자',
     unknown: '알 수 없음',
     backButton: '검색으로 돌아가기',
@@ -163,14 +173,15 @@ const messages = {
     stable: '안정 버전',
     prerelease: '사전 출시 버전',
     searchSuccess: '확장 프로그램을 찾았습니다: {name}',
-    downloadSuccess: '다운로드 완료: {name}'
+    downloadSuccess: '다운로드 완료: {name}',
+    installTips: '설치 명령: <code>code --install-extension [파일명.vsix]</code>'
   }
 }
 
 // 创建i18n实例
 const i18n = createI18n({
-  legacy: false, // 使用组合式API
-  locale: currentLang.value, // 初始值
+  legacy: false,
+  locale: currentLang.value,
   fallbackLocale: 'en-US',
   messages
 })
