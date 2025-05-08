@@ -180,6 +180,17 @@
             </el-select>
           </div>
 
+          <div class="platform-selector">
+            <el-select v-model="selectedPlatform" :placeholder="$t('selectPlatform')" clearable>
+              <el-option
+                v-for="platform in platforms"
+                :key="platform.value"
+                :label="platform.label"
+                :value="platform.value"
+              />
+            </el-select>
+          </div>
+
           <div class="download-button">
             <el-button type="primary" @click="downloadExtension" :loading="downloading" class="vite-button">
               <el-icon><Download /></el-icon>
@@ -243,12 +254,14 @@ const loading = ref(false)
 const error = ref('')
 const downloading = ref(false)
 const selectedVersion = ref('')
+const selectedPlatform = ref('')
 
 // 监听扩展变化，自动选择最新版本
 watch(extension, (newVal) => {
   if (newVal && newVal.versions && newVal.versions.length > 0) {
     const firstVersion = newVal.versions[0].version;
     selectedVersion.value = firstVersion;
+    selectedPlatform.value = ''; // Reset platform when extension changes
   }
 }, { immediate: true })
 
@@ -423,6 +436,20 @@ function filterAndSortVersions() {
   });
 }
 
+// 平台选项
+const platforms = [
+  { label: '默认', value: '' },
+  { label: 'Windows-x64', value: 'win32-x64' },
+  { label: 'Windows-arm64', value: 'win32-arm64' },
+  { label: 'Linux x64', value: 'linux-x64' },
+  { label: 'Linux ARM64', value: 'linux-arm64' },
+  { label: 'Linux ARM32', value: 'linux-armhf' },
+  { label: 'Alpine Linux 64 bit', value: 'alpine-x64' },
+  { label: 'Alpine Linux ARM64', value: 'alpine-arm64' },
+  { label: 'macOS-x64 (Intel)', value: 'darwin-x64' },
+  { label: 'macOS-arm64 (Apple Silicon)', value: 'darwin-arm64' }
+];
+
 // 搜索扩展
 async function searchExtension() {
   if (!searchQuery.value.trim()) {
@@ -515,7 +542,12 @@ function downloadExtension() {
     const version = selectedVersion.value;
     
     // 构建下载URL
-    const downloadUrl = `https://marketplace.visualstudio.com/_apis/public/gallery/publishers/${publisher}/vsextensions/${extensionName}/${version}/vspackage`;
+    let downloadUrl = `https://marketplace.visualstudio.com/_apis/public/gallery/publishers/${publisher}/vsextensions/${extensionName}/${version}/vspackage`;
+    
+    // 如果选择了目标平台，添加targetPlatform参数
+    if (selectedPlatform.value) {
+      downloadUrl += `?targetPlatform=${selectedPlatform.value}`;
+    }
     
     // 使用浏览器直接打开URL进行下载
     window.open(downloadUrl, '_blank');
@@ -827,11 +859,13 @@ function resetSearch() {
   color: #fff;
 }
 
-.version-selector {
-  margin-bottom: 2rem;
+/* 版本选择器 */
+.version-selector, .platform-selector {
+  margin-bottom: 1rem;
 }
 
-.version-selector :deep(.el-select) {
+.version-selector :deep(.el-select),
+.platform-selector :deep(.el-select) {
   width: 100%;
 }
 
