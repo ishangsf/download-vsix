@@ -136,8 +136,8 @@
           
           <div class="extension-info">
             <p class="description"><strong>{{ $t('description') }}:</strong> {{ extension.shortDescription }}</p>
-            <p><strong>{{ $t('version') }}:</strong> {{ extension.versions[0].version }}</p>
-            <p><strong>{{ $t('lastUpdated') }}:</strong> {{ formatDate(extension.versions[0].lastUpdated) }}</p>
+            <p><strong>{{ $t('version') }}:</strong> {{ selectedVersionInfo?.version }}</p>
+            <p><strong>{{ $t('lastUpdated') }}:</strong> {{ formatDate(selectedVersionInfo?.lastUpdated) }}</p>
             
             <div v-if="extension.tags && extension.tags.length > 0" class="tags-section">
               <strong>{{ $t('tags') }}:</strong>
@@ -174,7 +174,7 @@
               <el-option
                 v-for="version in uniqueVersions"
                 :key="version.version"
-                :label="version.version + ' (' + formatDate(version.lastUpdated) + ')'"
+                :label="version.version + ' (' + formatDate(version.lastUpdated) + ') · ' + $t(version.isPrerelease ? 'prerelease' : 'stable')"
                 :value="version.version"
               />
             </el-select>
@@ -246,6 +246,7 @@ import { Search, Download, Back, ArrowDown } from '@element-plus/icons-vue'
 import { useI18n } from 'vue-i18n'
 import i18n, { currentLang } from './i18n'
 import { ElMessage } from 'element-plus'
+import { galleryQueryFlags, normalizeVersions, getUniqueVersions, getDefaultVersion } from './extensionVersions.mjs'
 
 const { t } = useI18n();
 const searchQuery = ref('')
@@ -256,67 +257,14 @@ const downloading = ref(false)
 const selectedVersion = ref('')
 const selectedPlatform = ref('')
 
-// 监听扩展变化，自动选择最新版本
+// 默认选择最新稳定版；仅有预发布版本时选择最新预发布版。
 watch(extension, (newVal) => {
-  if (newVal && newVal.versions && newVal.versions.length > 0) {
-    const firstVersion = newVal.versions[0].version;
-    selectedVersion.value = firstVersion;
-    selectedPlatform.value = ''; // Reset platform when extension changes
-  }
+  selectedVersion.value = getDefaultVersion(newVal?.versions);
+  selectedPlatform.value = '';
 }, { immediate: true })
 
-// 计算唯一版本
-const uniqueVersions = computed(() => {
-  if (!extension.value || !extension.value.versions) return [];
-  
-  // 只处理非预发布的版本
-  const nonPrereleaseVersions = extension.value.versions.filter(v => !v.isPrerelease);
-  
-  // 如果没有非预发布版本，则使用所有版本
-  const versionsToProcess = nonPrereleaseVersions.length > 0 ? nonPrereleaseVersions : extension.value.versions;
-  
-  // 使用 Map 来存储唯一版本，以版本号为键
-  const uniqueVersionsMap = new Map();
-  
-  versionsToProcess.forEach(version => {
-    if (!uniqueVersionsMap.has(version.version)) {
-      uniqueVersionsMap.set(version.version, version);
-    }
-  });
-  
-  // 转换为数组
-  const versions = Array.from(uniqueVersionsMap.values());
-  
-  // 使用语义化版本比较进行排序
-  versions.sort((a, b) => {
-    // 解析语义化版本号（主版本.次版本.修订版）
-    const parseVersion = (v) => {
-      const parts = v.version.split('.');
-      return parts.map(p => {
-        // 去除可能的预发布标识符（如 -alpha, -beta 等）
-        const numPart = parseInt(p.split('-')[0], 10);
-        return isNaN(numPart) ? 0 : numPart;
-      });
-    };
-    
-    const vA = parseVersion(a);
-    const vB = parseVersion(b);
-    
-    // 主版本号比较
-    if (vA[0] !== vB[0]) return vB[0] - vA[0];
-    // 次版本号比较
-    if (vA[1] !== vB[1]) return vB[1] - vA[1];
-    // 修订版号比较
-    if (vA[2] !== vB[2]) return vB[2] - vA[2];
-    
-    // 如果语义化版本号相同，则按日期排序
-    const dateA = new Date(a.lastUpdated);
-    const dateB = new Date(b.lastUpdated);
-    return dateB - dateA;
-  });
-  
-  return versions;
-});
+// 合并同一版本的不同平台包，保留稳定版和预发布版。
+const uniqueVersions = computed(() => getUniqueVersions(extension.value?.versions));
 
 // 计算选定版本的信息
 const selectedVersionInfo = computed(() => {
@@ -361,81 +309,6 @@ function getCategoryType(index) {
   return types[index % types.length];
 }
 
-// 过滤和排序版本
-function filterAndSortVersions() {
-  if (!extension.value || !extension.value.versions || extension.value.versions.length === 0) {
-    return;
-  }
-  
-  // 增强的预发布标记识别
-  const prereleaseRegex = /-(alpha|beta|preview|rc|dev|nightly|insiders|next|canary|test|exp|unstable|pre|snapshot|build|ci|daily|edge|internal)/i;
-  
-  // 标记是否为预发布版本
-  extension.value.versions.forEach(v => {
-    // 检查是否包含预发布标识
-    v.isPrerelease = prereleaseRegex.test(v.version);
-    
-    // 检查版本结构
-    if (!v.isPrerelease) {
-      // 如果版本号包含 4 位及以上数字，可能是预发布版本
-      const numSegments = v.version.split('.').length;
-      if (numSegments > 3) {
-        v.isPrerelease = true;
-      }
-      
-      // 检查版本号是否包含任何字母
-      if (/[a-zA-Z]/.test(v.version)) {
-        v.isPrerelease = true;
-      }
-      
-      // 检查补丁版本是否异常大
-      const parts = v.version.split('.');
-      if (parts.length >= 3) {
-        const patchVersion = parseInt(parts[2], 10);
-        if (patchVersion > 99) {
-          v.isPrerelease = true;
-        }
-      }
-      
-      // 检查是否包含日期格式
-      if (/\d{8}/.test(v.version)) {
-        v.isPrerelease = true;
-      }
-    }
-  });
-  
-  // 过滤稳定版本
-  const stableVersions = extension.value.versions.filter(v => !v.isPrerelease);
-
-  // 如果存在稳定版本，则使用稳定版本列表
-  if (stableVersions.length > 0) {
-    extension.value.versions = stableVersions;
-  }
-  
-  // 按版本号排序
-  extension.value.versions.sort((a, b) => {
-    // 解析版本号
-    const parseVersion = (version) => {
-      const mainVersion = version.split('-')[0];
-      const parts = mainVersion.split('.');
-      return parts.slice(0, 3).map(part => parseInt(part, 10) || 0);
-    };
-    
-    const vA = parseVersion(a.version);
-    const vB = parseVersion(b.version);
-    
-    // 依次比较主版本号、次版本号、修订号
-    for (let i = 0; i < 3; i++) {
-      if (vA[i] !== vB[i]) {
-        return vB[i] - vA[i];
-      }
-    }
-    
-    // 按日期排序
-    return new Date(b.lastUpdated) - new Date(a.lastUpdated);
-  });
-}
-
 // 平台选项
 const platforms = [
   { label: '默认', value: '' },
@@ -478,7 +351,7 @@ async function searchExtension() {
           pageNumber: 1
         }
       ],
-      flags: 135,
+      flags: galleryQueryFlags,
       assetTypes: [],
       includeAllVersions: true
     }
@@ -499,8 +372,11 @@ async function searchExtension() {
         response.data.results[0].extensions && 
         response.data.results[0].extensions.length > 0) {
       
-      extension.value = response.data.results[0].extensions[0];
-      filterAndSortVersions();
+      const result = response.data.results[0].extensions[0];
+      extension.value = {
+        ...result,
+        versions: normalizeVersions(result.versions)
+      };
       
       ElMessage({
         message: t('searchSuccess', { name: extension.value.displayName }),
